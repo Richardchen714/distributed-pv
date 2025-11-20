@@ -1,0 +1,68 @@
+version: "3.8"
+services:
+  node1:
+    build: .
+    container_name: node1
+    environment:
+      - NODE_ID=node1
+      - VOTE=COMMIT
+      - VOTE_PORT=50051
+      - DECISION_PORT=60051
+    ports:
+      - "50011:50051"   # optional host mapping
+      - "60011:60051"
+  node2:
+    build: .
+    container_name: node2
+    environment:
+      - NODE_ID=node2
+      - VOTE=COMMIT
+      - VOTE_PORT=50051
+      - DECISION_PORT=60051
+    ports:
+      - "50012:50051"
+      - "60012:60051"
+  node3:
+    build: .
+    container_name: node3
+    environment:
+      - NODE_ID=node3
+      - VOTE=COMMIT
+      - VOTE_PORT=50051
+      - DECISION_PORT=60051
+    ports:
+      - "50013:50051"
+      - "60013:60051"
+  node4:
+    build: .
+    container_name: node4
+    environment:
+      - NODE_ID=node4
+      - VOTE=ABORT   # set one node to abort for testing
+      - VOTE_PORT=50051
+      - DECISION_PORT=60051
+    ports:
+      - "50014:50051"
+      - "60014:60051"
+  node5:
+    build: .
+    container_name: node5
+    environment:
+      - NODE_ID=node5
+      - VOTE=COMMIT
+      - VOTE_PORT=50051
+      - DECISION_PORT=60051
+    ports:
+      - "50015:50051"
+      - "60015:60051"
+
+  coordinator:
+    build: .
+    container_name: coordinator
+    depends_on:
+      - node1
+      - node2
+      - node3
+      - node4
+      - node5
+    command: ["python", "/app/coordinator/coordinator.py"]

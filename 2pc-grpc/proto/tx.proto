@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package tx;
+
+option go_package = "txpb";
+
+// Vote responses
+enum Vote {
+  VOTE_UNKNOWN = 0;
+  VOTE_COMMIT = 1;
+  VOTE_ABORT = 2;
+}
+
+// Decision choices
+enum Decision {
+  DECISION_UNKNOWN = 0;
+  GLOBAL_COMMIT = 1;
+  GLOBAL_ABORT = 2;
+}
+
+// Basic request containing transaction id and a sender id
+message TxRequest {
+  string tx_id = 1;
+  string from_node = 2;
+}
+
+// Vote response - includes node id and vote
+message VoteResponse {
+  string node_id = 1;
+  Vote vote = 2;
+}
+
+// Empty ack
+message Ack {
+  string node_id = 1;
+  Decision decision = 2;
+}
+
+// Participant service: voting and decision endpoints
+service Participant {
+  // Voting phase - coordinator -> participant vote request
+  rpc Vote (TxRequest) returns (VoteResponse) {}
+  // Decision phase - coordinator -> participant final decision
+  rpc Decide (Ack) returns (Ack) {}
+}
