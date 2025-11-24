@@ -1,6 +1,8 @@
-# README for Project 3
+# Report for Project 3
 
-[TOC]
+Group 7: Weiran Zhang, Hongzhuo Chen
+
+GitHub link to this project: https://github.com/Richardchen714/distributed-pv
 
 ## Two-Phase Commit (2PC) with gRPC (Voting + Decision Phases)
 
