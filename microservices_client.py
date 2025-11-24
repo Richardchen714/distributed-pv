@@ -8,7 +8,7 @@ import vault_pb2
 import vault_pb2_grpc
 
 # Configuration - Connect to API Gateway
-GATEWAY_ADDRESS = "localhost:50051"
+GATEWAY_ADDRESS = "localhost:50050"
 MASTER_PASSWORD = "my-super-secret-password"
 DEFAULT_USER_ID = "user_alice"
 

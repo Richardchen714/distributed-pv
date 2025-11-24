@@ -178,7 +178,7 @@ Raft nodes are fully containerized using Docker and communicate via gRPC.
 
 ---
 
-## 🧠 Raft Core Components
+##  Raft Core Components
 
 | File | Description |
 |------|-------------|
@@ -205,7 +205,64 @@ Each node is aware of all other nodes through `docker-compose.yml`.
 
 ---
 
-## 🧪 Test Cases
+## Implementation Details
+### Raft Message Formats
+```
+RequestVote RPC
+{
+  candidate_id: <Node requesting vote>,
+  term: <Current election term>
+}
+
+AppendEntries RPC
+{
+  leader_id: <Current leader node>,
+  entries: [
+    {
+      k: <Index of log entry>,
+      t: <Term when entry was added>,
+      o: <Client operation stored>
+    }
+  ],
+  commit_index: <Most recently committed index>
+}
+
+```
+### Leader Election Workflow
+```
+heartbeat timeout:1s
+Election timeout = random between 5.0 ~ 9.0 seconds(Election timeout was extended to 5–8 s (instead of the standard 1.5–3 s) to avoid split‐vote instability during local Docker testing)
+
+node1: didn't received node3 appendentry(heartbeat1), reach it election timeout, become candidate -> send requestvote RPC to node2/3/4/5(heartbeat6.5) -> received OK from node2/3/4/5(heartbeat7.5)， become leader
+
+node2: didn't received node3 appendentry(heartbeat1), didn't reach it election timeout->received node1 requestvote RPC(heartbeat6.5) -> send OK to node1(heartbeat7.5)
+
+node3: crash(heartbeat1) -> --- -> ----
+
+node4: didn't received node3 appendentry(heartbeat1), didn't reach it election timeout->received node1 requestvote RPC(heartbeat6.5) -> send OK to node1(heartbeat7.5)
+
+node5: didn't received node3 appendentry(heartbeat1), didn't reach it election timeout->received node1 requestvote RPC(heartbeat6.5) -> send OK to node1(heartbeat7.5)
+```
+
+### Log Replication Workflow
+```
+node1/node2/node3(leader)/node4/node5
+
+Workflow: new client request2 -> node1 -> forward request to node3(next heartbeat) -> node3(received forwarded request->update current entry(request2 pending)), multicast appendentry RPC to other nodes(1/2/4/5)(next heartbeat) -> other nodes commit request1 and update their log entry, send ACK to node3(next heartbeat) -> node3 commit request2 and update entry(c: The index of the most recently committed operation)
+
+node1: received node1 appendentry/received client request(heartbeat0) -> forward request to node3(heartbeat1) -> received node1 appendentry RPC(heartbeat2) -> commit request1, send ACK(heartbeat3)
+
+node2: received node1 appendentry(heartbeat0)->received appendentry(heartbeat1)->received node3 appendentry RPC(heartbeat2) -> commit request1, send ACK(heartbeat3)
+
+node3: sent appendentry to node1/2/4/5(heartbeat0)->received forwarded request2(latest committed request1)(heatbeat1), update current entry(request2 pending)->multicast appendentry RPC to other nodes(1/2/4/5)(heartbeat2)->node3 received ACK, commit request2 and update entry(c: The index of the most recently committed operation)(heartbeat3)
+
+node4: received node1 appendentry(heartbeat0) -> received appendentry(heartbeat1) -> received node3 appendentry RPC(heartbeat2) -> commit request1, send ACK(heartbeat3)
+
+node5: received node1 appendentry(heartbeat0) -> received appendentry(heartbeat1) -> received node3 appendentry RPC(heartbeat2) -> commit request1, send ACK(heartbeat3)
+```
+
+
+##  Test Cases
 
 | Test Case | Description |
 |-----------|-------------|
@@ -218,52 +275,42 @@ Each node is aware of all other nodes through `docker-compose.yml`.
 
 ---
 
+##  Test Cases details
+### TC1 – Leader Election
+- Screenshot
 
-## 🚀 How to Run
+![Leader Election](test_case_image_for_project3/TC1.jpg)
 
-### 1️⃣ Create Virtual Environment
-```bash
-python -m venv venv
-```
-### 2️⃣ Activate Virtual Environment
-### Windows (PowerShell / CMD):
-```bash
-venv\Scripts\activate
-```
-### macOS / Linux:
-```bash
-source venv/bin/activate
-```
-### 3️⃣ Install Dependencies
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-### 4️⃣ Run Local Raft Q3 / Q4 Tests(TC1/2/3)
-### ⚠ Before running Q3_test.py, update project paths:
-In raft/Q3_test.py, modify:
-```bash
-PROJECT_DIR = r"E:\distributed-pv"      # Replace with your local project path
-PYTHON = r"venv\Scripts\python.exe"     # Replace with path to your venv Python
-```
-Q3 & Q4 test:
-```bash
-(venv) E:\distributed-pv\raft>python Q3_test.py
-(venv) E:\distributed-pv>py -m raft.Q4_test
-```
-### During either Q3_test execution:
-- Identify the current leader terminal window.
-- Press Ctrl + C to terminate it.
-- Observe in the remaining node windows:
-### 5️⃣ Start Full Distributed System (Raft + Microservices)(TC4)
-```bash
-docker compose build
-docker compose up
-```
-### 6️⃣ Test Password Add via Raft (TC5)
-### Run in another terminal (still in venv):
-```bash
-python test_raft_addsecret.py --name Test1 --value 123456
-python test_raft_addsecret.py --name Test2 --value 000000
-```
+### TC2 – Log Replication
+- Screenshot
 
+![Log Replication](test_case_image_for_project3/TC2_1.jpg)
+![Log Replication](test_case_image_for_project3/TC2_2.jpg)
+![Log Replication](test_case_image_for_project3/TC2_3.jpg)
+
+### TC3 – Leader Crash Recovery
+- Screenshot
+
+![Leader Crash Recovery](test_case_image_for_project3/TC3.jpg)
+
+### TC4 – System Initialization (5 Raft nodes + Microservices of Password App)
+- Screenshot
+
+![System Initialization](test_case_image_for_project3/TC4_1.jpg)
+![System Initialization](test_case_image_for_project3/TC4_2.jpg)
+
+### TC5 – Add Secret via Raft
+- Screenshot
+
+![Add Secret via Raft](test_case_image_for_project3/TC5_1.jpg)
+![Add Secret via Raft](test_case_image_for_project3/TC5_2.jpg)
+
+## Lessons Learned & Implementation Challenges
+During implementation, we discovered that using the standard Raft election timeout configuration of 1.5–3.0 seconds (as recommended in theoretical Raft papers and assignment specification) led to frequent split-vote occurrences and unstable leader selection behavior.
+This is likely due to simulation on a single local PC, where multiple Raft nodes compete for computational resources, introducing timing inconsistencies.
+
+To address this problem, we extended the election timeout to 5.0–9.0 seconds, which:
+
+- Eliminated unstable election cycles
+- Allowed clean observation of leader re-election after failures
+- Prevented frequent split votes during startup

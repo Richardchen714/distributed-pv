@@ -7,10 +7,15 @@ import json
 import threading
 from datetime import datetime
 
+import json
+import uuid
+from vault_pb2 import AddSecretResponse
+from raft.raft_integration import propose_operation
 import vault_pb2
 import vault_pb2_grpc
 import shared_data
 
+RAFT_NODE_ADDR = os.getenv("RAFT_NODE_ADDR", "raft-node1:7001")
 # Replication service addresses
 REPLICATION_SERVICE_ADDRS = os.environ.get("REPLICATION_NODES", "").split(',')
 
@@ -68,35 +73,62 @@ def replicate_deletion(secret_id):
 
 class SecretManagementServiceImpl(vault_pb2_grpc.SecretManagementServiceServicer):
 
+    # def AddSecret(self, request, context):
+    #     """Requirement 1: Add Secret"""
+    #     import uuid
+
+    #     secret_id = str(uuid.uuid4())
+    #     timestamp = datetime.utcnow().isoformat()
+
+    #     # Store secret locally
+    #     shared_data.set_secret(secret_id, {
+    #         'user_id': request.user_id,
+    #         'secret_name': request.secret_name,
+    #         'data': request.data,
+    #         'created_at': timestamp,
+    #         'updated_at': timestamp
+    #     })
+
+    #     print(f"[SecretManagement] Added secret {secret_id} for user {request.user_id}")
+
+    #     # Replicate in background
+    #     threading.Thread(
+    #         target=replicate_secret,
+    #         args=(secret_id, request.user_id, request.secret_name, request.data, timestamp)
+    #     ).start()
+
+    #     return vault_pb2.AddSecretResponse(
+    #         secret_id=secret_id,
+    #         message="Secret added successfully",
+    #         success=True
+    #     )
     def AddSecret(self, request, context):
-        """Requirement 1: Add Secret"""
-        import uuid
+        """Add Secret via Raft consensus"""
 
-        secret_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().isoformat()
-
-        # Store secret locally
-        shared_data.set_secret(secret_id, {
-            'user_id': request.user_id,
-            'secret_name': request.secret_name,
-            'data': request.data,
-            'created_at': timestamp,
-            'updated_at': timestamp
+        operation = json.dumps({
+            "type": "add_secret",
+            "user_id": request.user_id,
+            "secret_name": request.secret_name,
+            "data": request.data,
         })
 
-        print(f"[SecretManagement] Added secret {secret_id} for user {request.user_id}")
+        success, result = propose_operation(operation)  
 
-        # Replicate in background
-        threading.Thread(
-            target=replicate_secret,
-            args=(secret_id, request.user_id, request.secret_name, request.data, timestamp)
-        ).start()
+        if not success:
+            return AddSecretResponse(
+                secret_id="",
+                message=f"Operation rejected: {result}",
+                success=False
+            )
 
-        return vault_pb2.AddSecretResponse(
-            secret_id=secret_id,
-            message="Secret added successfully",
+        print(f"[SecretManagement] Secret committed at Raft index {result}")
+
+        return AddSecretResponse(
+            secret_id=str(result),
+            message="Secret added via Raft replication",
             success=True
         )
+
 
     def UpdateSecret(self, request, context):
         """Requirement 3: Update Secret"""
